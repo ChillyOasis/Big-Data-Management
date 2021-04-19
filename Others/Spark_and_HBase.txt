@@ -1,0 +1,99 @@
+// Task 2
+// (1) Create a DataFrame named weatherDFbased on 1092
+:paste
+case class TempHeader (
+recordId: String,
+station: String,
+month: String,
+date: String,
+hour: String,
+temperature: Double
+)
+ 
+import spark.implicits._
+ 
+// substring starts from 0, and excludes the second number
+val weatherDF = spark.sparkContext.textFile("1902").
+map(
+rec => List (
+rec.substring(0, 26).trim(), // from 1st character till 26th character
+rec.substring(4, 10).trim(),
+rec.substring(19, 21).trim(),
+rec.substring(21, 23).trim(),
+rec.substring(23, 25).trim(),
+rec.substring(87, 92).trim()
+)).
+map(att => TempHeader(att(0), att(1), att(2), att(3), att(4), (att(5).trim.toDouble)/10))
+.toDF()
+ 
+weatherDF.printSchema()
+ 
+weatherDF.show()
+ 
+// (2) Compute (and return) the maximum, minimum and average temperatures for each month in weatherDF
+:paste
+weatherDF.createOrReplaceTempView("weatherDFView")
+ 
+val query = spark.sql("""SELECT month, max(temperature), min(temperature), avg(temperature) FROM weatherDFView GROUP BY month ORDER BY MONTH""".stripMargin)
+ 
+query.show()
+
+// (3) Convert the first 10 rows in weatherDF into a HBase table named weatherHB
+:paste
+case class TempHeader (
+recordId: String,
+station: String,
+month: String,
+date: String,
+hour: String,
+temperature: String
+)
+
+import spark.implicits._
+
+val newTemp1 = TempHeader("0035029070999991902010106", "029070", "01", "01", "06", "-9.4")
+val newTemp2 = TempHeader("0035029070999991902010113", "029070", "01", "01", "13", "-10.0")
+val newTemp3 = TempHeader("0035029070999991902010120", "029070", "01", "01", "20", "-11.7")
+val newTemp4 = TempHeader("0035029070999991902010206", "029070", "01", "02", "06", "-16.1")
+val newTemp5 = TempHeader("0029029070999991902010213", "029070", "01", "02", "13", "-17.2")
+val newTemp6 = TempHeader("0029029070999991902010220", "029070", "01", "02", "20", "-17.8")
+val newTemp7 = TempHeader("0029029070999991902010306", "029070", "01", "03", "06", "-17.8")
+val newTemp8 = TempHeader("0035029070999991902010313", "029070", "01", "03", "13", "-17.2")
+val newTemp9 = TempHeader("0029029070999991902010320", "029070", "01", "03", "20", "-15.0")
+val newTemp10 = TempHeader("0035029070999991902010406", "029070", "01", "04", "06", "-10.6")
+val newDataDS = Seq(newTemp1, newTemp2, newTemp3, newTemp4, newTemp5, newTemp6, newTemp7, newTemp8, newTemp9, newTemp10).toDS()
+
+def catalog = s"""{
+|"table":{"namespace":"default", "name": "weatherHB"},
+|"rowkey":"key",
+|"columns":{
+|"recordId":{"cf":"rowkey", "col":"key", "type":"string"},
+|"station":{"cf":"station", "col":"stationID", "type":"string"},
+|"month":{"cf":"TimeStamp", "col":"TimeStampM", "type":"string"},
+|"date":{"cf":"TimeStamp", "col":"TimeStampD", "type":"string"},
+|"hour":{"cf":"TimeStamp", "col":"TimeStampH", "type":"string"},
+|"temperature":{"cf":"temp", "col":"temp", "type":"string"}
+|}
+|}""".stripMargin
+
+import org.apache.spark.sql.execution.datasources.hbase._
+
+def withCatalog(cat: String) = {
+spark.sqlContext
+.read
+.options(Map(HBaseTableCatalog.tableCatalog->cat))
+.format(
+"org.apache.spark.sql.execution.datasources.hbase"
+).load()
+}
+
+def dfHbase = withCatalog(catalog)
+
+newDataDS.write
+.options(Map(
+HBaseTableCatalog.tableCatalog -> catalog,
+HBaseTableCatalog.newTable -> "6"
+)).format(
+"org.apache.spark.sql.execution.datasources.hbase"
+).save()
+dfHbase.show()

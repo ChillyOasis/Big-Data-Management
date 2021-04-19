@@ -1,0 +1,37 @@
+joinOrders = join orders by ORDER_ID, orderDetail by ORDER_ID;
+filterOrders = filter joinOrders by orders::SHIP_CITY == 'London';
+groupLondon = group filterOrders all;
+countLondon = foreach groupLondon generate COUNT(filterOrders);
+dump countLondon;
+
+OrdersIn1996 = filter orders by ENDSWITH(ORDER_DATE,'1996');
+OrdersDetailIn1996 = join OrdersIn1996 by ORDER_ID, orderDetail by ORDER_ID;
+ProductsOrderedIn1996 = foreach OrdersDetailIn1996 generate PRODUCT_ID;
+AllProducts = foreach product generate PRODUCT_ID;
+leftouter = join AllProducts by PRODUCT_ID left outer, ProductsOrderedIn1996 by PRODUCT_ID;
+notOrdered = filter leftouter by ProductsOrderedIn1996::orderDetail::PRODUCT_ID is null;
+notOrderedGrouped = group notOrdered all;
+notOrderedCount = foreach notOrderedGrouped  generate COUNT(notOrdered);
+dump notOrderedCount;
+
+orderIDQuery = filter orderDetail by STARTSWITH(ORDER_ID, '1027');
+calculateOrder = foreach orderIDQuery generate ORDER_ID, (UNIT_PRICE * QUANTITY) as orderValue;
+groupOrder = group calculateOrder by ORDER_ID;
+groupValues = foreach groupOrder generate group, SUM(calculateOrder.orderValue);
+dump groupValues;
+
+salesInfo = foreach salesPerson generate EMPLOYEE_ID, FIRSTNAME, LASTNAME;
+ordDetailInfo = foreach orderDetail generate SALESPERSON_ID, UNIT_PRICE, QUANTITY;
+joinSalesOD = join salesInfo by EMPLOYEE_ID, ordDetailInfo by SALESPERSON_ID;
+getOrderValue = foreach joinSalesOD generate EMPLOYEE_ID, FIRSTNAME, LASTNAME, (UNIT_PRICE * QUANTITY) as orderValue;
+groupSalesOrdDetail = group getOrderValue by (EMPLOYEE_ID, FIRSTNAME, LASTNAME);
+getSumOrdValue = foreach groupSalesOrdDetail generate group, SUM(getOrderValue.orderValue) as sumOrdValue;
+orderSumOrdValue = order getSumOrdValue by sumOrdValue desc;
+top3OrdValue = limit orderSumOrdValue 3;describe top3OrdValue;
+dump top3OrdValue;
+
+pName = foreach product generate PRODUCT_ID, PRODUCT_NAME;
+joinPandOD = join pName by PRODUCT_ID, orderDetail by PRODUCT_ID;
+groupProduct = group joinPandOD by PRODUCT_NAME;
+countProduct = foreach groupProduct generate group, COUNT(joinPandOD);
+dump countProduct;

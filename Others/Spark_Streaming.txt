@@ -1,0 +1,32 @@
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.streaming.{Trigger,ProcessingTime}
+
+val retail_data = "task4/*.csv"
+val staticDataFrame = spark.read.format("csv").option("header", "true").option("inferSchema", "true").load(retail_data)
+val staticSchema = staticDataFrame.schema
+staticDataFrame.printSchema()
+// root
+// |--InvoiceNo: string (nullable = true)
+// |--StockCode: string (nullable = true)
+// |--Description: string (nullable = true)
+// |--Quantity: integer (nullable = true)
+// |--InvoiceDate: timestamp (nullable = true)
+// |--UnitPrice: double (nullable = true)
+// |--CustomerID: double (nullable = true)
+// |--Country: string (nullable = true)
+
+spark.conf.set("spark.sql.shuffle.partitions", 2)
+
+val streamingDataFrame = spark.readStream.schema(staticSchema).option("maxFilesPerTrigger", 10).format("csv").option("header", "true").load(retail_data)
+
+streamingDataFrame.isStreaming //true if streaming
+val purchaseQuery = streamingDataFrame
+
+purchaseQuery.createOrReplaceTempView("myTable")
+
+// compute average
+val average = spark.sql("select StockCode, avg(Quantity) as avgQuantity from myTable where StockCode is not null group by StockCode order by avgQuantity desc")
+
+val query = average.writeStream.format("console").queryName("customer_purchases").outputMode("complete").trigger(ProcessingTime("5 seconds")).start()
+
+query.awaitTermination()

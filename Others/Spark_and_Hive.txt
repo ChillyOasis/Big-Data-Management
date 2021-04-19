@@ -1,0 +1,60 @@
+import org.apache.spark.sql.{SaveMode, SparkSession}
+import org.apache.spark.sql.functions.{col, count, desc}
+import spark.implicits._
+
+object solution3{
+	def main(args: Array[String]): Unit = {
+	
+		val spark = SparkSession.builder.appName("task4")
+			.config("spark.master", "local")
+			.config("hive.metastore.uris", "thrift://localhost:9083")
+			.config("hive.metastore.schema.verification", "true")
+			.enableHiveSupport()
+			.getOrCreate()
+		
+		spark.sparkContext.setLogLevel("ERROR")
+
+		case class patentDetails(
+		patent:String,
+		gyear:String,
+		gdate:String,
+		appyear:String,
+		country:String)
+
+		case class citeDetails(
+		citing:String,
+		cited:String)
+
+		val apat =  spark.sparkContext.textFile("/user/bigdata/task3/apat63_99.txt")
+		.map(_.split(","))
+		.map(attributes=>patentDetails(attributes(0), attributes(1), attributes(2), attributes(3), attributes(4)))
+		.toDF()
+
+		val cite = spark.sparkContext.textFile("/user/bigdata/task3/cite75_99.txt")
+		.map(_.split(","))
+		.map(attributes=>citeDetails(attributes(0), attributes(1)))
+		.toDF()
+
+		apat.createOrReplaceTempView("viewApat")
+		cite.createOrReplaceTempView("viewCite")
+
+		val findAU = spark.sql("""SELECT patent, COUNT(*) AS citations
+		| FROM viewApat
+		| INNER JOIN viewCite
+		| ON viewApat.patent = viewCite.citing
+		| WHERE country = "\"AU\""
+		| GROUP BY patent
+		| ORDER BY citations desc
+		| LIMIT 20
+		| """.stripMargin)
+		findAU.show()
+
+		findAU.write
+		.mode(SaveMode.Overwrite)
+		.saveAsTable("HiTAB")
+		sql("select * from HiTAB").show()
+		
+		spark.stop()
+		}
+	}
+
